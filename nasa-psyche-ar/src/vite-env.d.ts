@@ -1,3 +1,4 @@
+/** A-Frame element types for JSX. */
 declare namespace JSX {
     interface IntrinsicElements {
         'a-scene': any;
@@ -6,5 +7,10 @@ declare namespace JSX {
         'a-plane': any;
         'a-box': any;
         'a-cylinder': any;
+        'a-cone': any;
+        'a-sphere': any;
+        'a-light': any;
+        'a-gltf-model': any;
+        'a-text': any;
     }
 }

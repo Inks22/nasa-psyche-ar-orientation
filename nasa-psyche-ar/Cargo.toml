@@ -1,3 +1,4 @@
+# Rust workspace: rust_engine is the only member.
 [workspace]
 members = [
     "rust_engine"
