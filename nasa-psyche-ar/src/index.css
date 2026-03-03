@@ -167,6 +167,14 @@ body {
   box-shadow: 0 20px 50px rgba(0, 212, 255, 0.5);
 }
 
+/* Keyboard focus on landing buttons should match hover */
+#play-button:focus, #play-button:focus-visible,
+#start-button:focus, #start-button:focus-visible {
+  outline: none;
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 20px 50px rgba(0, 212, 255, 0.5);
+}
+
 /* Fade animations */
 @keyframes fadeInDown {
   from {
@@ -452,4 +460,197 @@ body {
   border-radius: 15px;
   text-align: center;
   font-size: 1.2rem;
+}
+
+/* --- Difficulty modal --- */
+.difficulty-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.0);
+  backdrop-filter: blur(0px) saturate(1.0);
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 260ms ease, backdrop-filter 260ms ease, background 260ms ease, visibility 260ms;
+}
+
+.difficulty-overlay.open {
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px) saturate(1.1);
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+}
+
+.difficulty-modal {
+  width: min(760px, 92vw);
+  padding: 36px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  color: #fff;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.04);
+  transform: translateY(-10px) scale(0.985);
+  opacity: 0;
+  transition: transform 260ms cubic-bezier(0.2,0.9,0.3,1), opacity 260ms ease, box-shadow 260ms;
+}
+
+.difficulty-overlay.open .difficulty-modal {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.difficulty-title {
+  font-size: 2.4rem;
+  margin: 0 0 6px 0;
+  letter-spacing: 3px;
+  font-weight: 900;
+  background: linear-gradient(90deg, #00d4ff 0%, #7b2cbf 50%, #ff006e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 8px 40px rgba(123,44,191,0.14);
+}
+.difficulty-sub {
+  margin: 8px 0 20px 0;
+  opacity: 0.95;
+  font-size: 1.08rem;
+  color: rgba(255,255,255,0.9);
+  font-style: italic;
+  max-width: 86%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.difficulty-title::after {
+  content: '';
+  display: block;
+  width: 96px;
+  height: 4px;
+  margin: 14px auto 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #00d4ff 0%, #7b2cbf 50%, #ff006e 100%);
+  box-shadow: 0 8px 16px rgba(123,44,191,0.12);
+}
+
+.difficulty-buttons {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.difficulty-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 24px 32px;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  border-radius: 14px;
+  border: none;
+  background: #1f2937;
+  color: #ddd;
+  cursor: pointer;
+  transition: transform 220ms cubic-bezier(0.2,0.9,0.3,1), box-shadow 220ms, background 220ms, color 220ms;
+  box-shadow: 0 10px 36px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+}
+
+/* Hover: enlarge and switch to Psyche gradient */
+.difficulty-btn:hover {
+  transform: translateY(-6px) scale(1.06);
+  color: white;
+  background: linear-gradient(135deg, #00d4ff 0%, #7b2cbf 50%, #ff006e 100%);
+  box-shadow: 0 30px 60px rgba(123,44,191,0.18), 0 6px 20px rgba(0,0,0,0.6);
+}
+
+/* Make keyboard focus visually identical to hover (for keyboard users) */
+.difficulty-btn:focus,
+.difficulty-btn:focus-visible {
+  outline: none;
+  transform: translateY(-6px) scale(1.06);
+  color: white;
+  background: linear-gradient(135deg, #00d4ff 0%, #7b2cbf 50%, #ff006e 100%);
+  box-shadow: 0 30px 60px rgba(123,44,191,0.18), 0 6px 20px rgba(0,0,0,0.6);
+}
+
+.difficulty-btn:active {
+  transform: translateY(-2px) scale(1.03);
+}
+
+.difficulty-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.difficulty-cancel {
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #ddd;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .difficulty-modal { padding: 20px; }
+  .difficulty-title { font-size: 1.6rem; }
+  .difficulty-btn { padding: 16px 18px; font-size: 1.05rem; }
+  .difficulty-buttons { flex-direction: column; gap: 12px; }
+}
+
+/* Mode banner */
+.mode-banner {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 2px;
+  z-index: 3000;
+  font-size: 0.95rem;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+
+/* Mode UI (energy + samples) */
+.mode-ui {
+  position: absolute;
+  top: 120px;
+  left: 30px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  pointer-events: none;
+  z-index: 1500;
+}
+.mode-ui .energy-display, .mode-ui .samples-display {
+  background: rgba(0,0,0,0.6);
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 700;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.energy-bar {
+  width: 120px;
+  height: 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.energy-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, #7bffb2 0%, #00d4ff 60%);
 }
