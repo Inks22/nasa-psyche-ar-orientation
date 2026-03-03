@@ -3,6 +3,7 @@
  * Uses React + A-Frame for 3D, Rust/WASM for collision and movement.
  */
 import { useEffect, useState, useCallback, useRef } from 'react';
+import MODE_CONFIG, { Difficulty } from './modeConfig';
 // @ts-ignore
 import init, { start_ar_session, load_collision_mesh, move_rover_on_asteroid, get_surface_point_in_direction } from '../rust_engine/pkg/rust_engine';
 
@@ -29,6 +30,31 @@ const WAYPOINT_DIRECTIONS: [number, number, number][] = [
 const App = () => {
     const [gameState, setGameState] = useState('MENU');
     const [score, setScore] = useState(0);
+    const [difficulty, setDifficulty] = useState<'easy' | 'normal' | 'hard'>('normal');
+    const modeCfg = MODE_CONFIG[difficulty as Difficulty];
+    // Samples (collectibles) and Obstacles
+    const [samples, setSamples] = useState<{ id: string; x: number; y: number; z: number }[]>([]);
+    const samplesRef = useRef<typeof samples>([]);
+    samplesRef.current = samples;
+    const [samplesCollected, setSamplesCollected] = useState(0);
+
+    const [obstacles, setObstacles] = useState<{ id: string; x: number; y: number; z: number }[]>([]);
+    const obstaclesRef = useRef<typeof obstacles>([]);
+    obstaclesRef.current = obstacles;
+
+    // Energy meter (0..100) - skeleton only (no draining logic)
+    const [energy, setEnergy] = useState(100);
+    const [showDifficulty, setShowDifficulty] = useState(false);
+    /**
+     * Centralized difficulty configuration placeholder.
+     * Add mode-specific settings here (spawn counts, multipliers, timers) so
+     * different modes can be wired up easily later without changing logic.
+     */
+    const difficultyConfig: Record<string, any> = {
+        easy: { spawnCount: 4, scoreMultiplier: 0.8 },
+        normal: { spawnCount: 6, scoreMultiplier: 1.0 },
+        hard: { spawnCount: 8, scoreMultiplier: 1.25 },
+    };
     const [scanPrompt, setScanPrompt] = useState(true);
     const [meshLoaded, setMeshLoaded] = useState(false);
     const [roverReady, setRoverReady] = useState(false);
@@ -41,6 +67,10 @@ const App = () => {
     const moveLoopId = useRef<number | null>(null);
     const lastMoveTime = useRef(0);
     const prevCamUp = useRef<any>(null);
+    // Refs for keyboard navigation
+    const playBtnRef = useRef<HTMLButtonElement | null>(null);
+    const arBtnRef = useRef<HTMLButtonElement | null>(null);
+    const diffBtnRefs = [useRef<HTMLButtonElement | null>(null), useRef<HTMLButtonElement | null>(null), useRef<HTMLButtonElement | null>(null)];
 
     /** Initialize WASM and load asteroid collision mesh from GLB. */
     useEffect(() => {
@@ -64,9 +94,11 @@ const App = () => {
         initRust();
     }, []);
 
-    const handleStart = async (mode: string) => {
+    const handleStart = async (mode: string, chosenDifficulty?: 'easy' | 'normal' | 'hard') => {
+        if (chosenDifficulty) setDifficulty(chosenDifficulty);
+
         if (mode === 'web_game') {
-            console.log("Starting WEB GAME MODE");
+            console.log("Starting WEB GAME MODE", chosenDifficulty);
             setGameState('WEB_GAME');
         } else if (mode === 'ar') {
             console.log("Starting AR MODE");
@@ -120,6 +152,9 @@ const App = () => {
         if (!THREE || !rover) return;
 
         const currentPos = rover.getAttribute('position');
+        // Preserve raw input direction for orientation; difficulty-specific
+        // behavior is intentionally not applied here yet. Use `difficultyConfig`
+        // to drive future per-mode changes.
         lastDirectionRef.current = [inputX, inputY];
 
         /* Convert screen-space input to world-space direction via camera frame. */
@@ -141,7 +176,7 @@ const App = () => {
             updateRoverRotation(rover, result.position[0], result.position[1], result.position[2], moveDir.x, moveDir.y, moveDir.z);
             updateCamera(result.position[0], result.position[1], result.position[2]);
 
-            /* Check waypoint collection within radius. */
+            /* Check waypoint collection within radius (waypoints + samples). */
             const COLLECTION_RADIUS = 0.25;
             const rx = result.position[0], ry = result.position[1], rz = result.position[2];
             const wps = waypointsRef.current;
@@ -153,10 +188,76 @@ const App = () => {
                 setWaypoints(prev => prev.filter(wp => !collected.find(c => c.id === wp.id)));
                 setScore(s => s + collected.length * 100);
             }
+            // samples
+            const sps = samplesRef.current;
+            const collectedSamples = sps.filter(s => {
+                const dx = s.x - rx, dy = s.y - ry, dz = s.z - rz;
+                return dx * dx + dy * dy + dz * dz < COLLECTION_RADIUS * COLLECTION_RADIUS;
+            });
+            if (collectedSamples.length > 0) {
+                setSamples(prev => prev.filter(s => !collectedSamples.find(c => c.id === s.id)));
+                setSamplesCollected(c => c + collectedSamples.length);
+                setScore(s => s + collectedSamples.length * 150);
+            }
         } catch (e) {
             console.error("Movement error:", e);
         }
     }, [gameState]);
+
+    /**
+     * Global keyboard handlers: Escape closes modal; focus management when modal opens.
+     */
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && showDifficulty) {
+                setShowDifficulty(false);
+            }
+        };
+
+        window.addEventListener('keydown', onKey);
+
+        return () => window.removeEventListener('keydown', onKey);
+    }, [showDifficulty]);
+
+    useEffect(() => {
+        if (showDifficulty) {
+            // focus first difficulty button when opening
+            setTimeout(() => diffBtnRefs[0].current?.focus(), 50);
+        } else {
+            // return focus to Launch Mission button when closing
+            setTimeout(() => playBtnRef.current?.focus(), 50);
+        }
+    }, [showDifficulty]);
+
+    /**
+     * Trap Tab focus inside the start screen when on MENU and modal is closed.
+     * This prevents Tab from moving focus out of the app's start UI.
+     */
+    useEffect(() => {
+        if (gameState !== 'MENU' || showDifficulty) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Tab') return;
+            e.preventDefault();
+            const order: HTMLElement[] = [];
+            if (playBtnRef.current && !playBtnRef.current.hasAttribute('disabled')) order.push(playBtnRef.current);
+            if (arBtnRef.current) order.push(arBtnRef.current);
+            if (order.length === 0) return;
+
+            const active = document.activeElement as HTMLElement;
+            const idx = order.indexOf(active);
+            const dir = e.shiftKey ? -1 : 1;
+            let next: number;
+            if (idx === -1) {
+                next = dir === 1 ? 0 : order.length - 1;
+            } else {
+                next = (idx + dir + order.length) % order.length;
+            }
+            order[next].focus();
+        };
+
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [gameState, showDifficulty]);
 
     /** Aligns rover to surface normal with forward direction projected onto tangent plane. */
     const updateRoverRotation = (rover: any, x: number, y: number, z: number, dirX: number, dirY: number, dirZ: number) => {
@@ -270,8 +371,8 @@ const App = () => {
             setRoverReady(false);
             setScore(0);
             prevCamUp.current = null;
-
             if (meshLoaded && gameState === 'WEB_GAME') {
+                // spawn waypoints (existing) and samples/obstacles based on mode config
                 const wps: { id: string; x: number; y: number; z: number; nx: number; ny: number; nz: number }[] = [];
                 WAYPOINT_DIRECTIONS.forEach(([dx, dy, dz], i) => {
                     try {
@@ -284,8 +385,35 @@ const App = () => {
                     } catch (_) { /* Raycast missed; skip this waypoint. */ }
                 });
                 setWaypoints(wps);
+
+                // Samples
+                const sampleList: { id: string; x: number; y: number; z: number }[] = [];
+                for (let i = 0; i < modeCfg.spawnSamples; i++) {
+                    const dir = WAYPOINT_DIRECTIONS[i % WAYPOINT_DIRECTIONS.length];
+                    try {
+                        const r = get_surface_point_in_direction(dir[0], dir[1], dir[2]);
+                        sampleList.push({ id: `s-${i}`, x: r.position[0], y: r.position[1], z: r.position[2] });
+                    } catch (_) { }
+                }
+                setSamples(sampleList);
+
+                // Obstacles (visual only for now)
+                const obsList: { id: string; x: number; y: number; z: number }[] = [];
+                for (let i = 0; i < modeCfg.spawnObstacles; i++) {
+                    const dir = WAYPOINT_DIRECTIONS[(i + 3) % WAYPOINT_DIRECTIONS.length];
+                    try {
+                        const r = get_surface_point_in_direction(dir[0], dir[1], dir[2]);
+                        obsList.push({ id: `o-${i}`, x: r.position[0], y: r.position[1], z: r.position[2] });
+                    } catch (_) { }
+                }
+                setObstacles(obsList);
+
+                // Energy meter (skeleton): initialize to full. Implementation left for later.
+                setEnergy(100);
             } else {
                 setWaypoints([]);
+                setSamples([]);
+                setObstacles([]);
             }
         }
     }, [gameState, meshLoaded]);
@@ -430,10 +558,34 @@ const App = () => {
                     <h1>Psyche</h1>
                     <p className="subtitle">Explore • Navigate • Discover</p>
                     <div className="button-container">
-                        <button id="play-button" onClick={() => handleStart('web_game')} disabled={!meshLoaded}>
+                        <button id="play-button" ref={playBtnRef} onClick={() => setShowDifficulty(true)} disabled={!meshLoaded}>
                             {meshLoaded ? 'Launch Mission' : 'Loading...'}
                         </button>
-                        <button id="start-button" onClick={() => handleStart('ar')}>AR Experience</button>
+                        <button id="start-button" ref={arBtnRef} onClick={() => handleStart('ar')}>AR Experience</button>
+                    </div>
+                    <div className={`difficulty-overlay ${showDifficulty ? 'open' : 'closed'}`} onClick={() => setShowDifficulty(false)}>
+                        <div className="difficulty-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-hidden={!showDifficulty}>
+                            <h2 className="difficulty-title">Select Difficulty</h2>
+                            <p className="difficulty-sub">Choose how challenging the mission will be.</p>
+
+                            <div className="difficulty-buttons" onKeyDown={(e) => {
+                                // Trap Tab navigation between the three difficulty buttons
+                                if (e.key === 'Tab') {
+                                    e.preventDefault();
+                                    const refs = diffBtnRefs;
+                                    const focusedIndex = refs.findIndex(r => r.current === document.activeElement);
+                                    const dir = e.shiftKey ? -1 : 1;
+                                    let next = focusedIndex + dir;
+                                    if (next < 0) next = refs.length - 1;
+                                    if (next >= refs.length) next = 0;
+                                    refs[next].current?.focus();
+                                }
+                            }}>
+                                <button ref={diffBtnRefs[0]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game','easy'); }}>Easy</button>
+                                <button ref={diffBtnRefs[1]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game','normal'); }}>Normal</button>
+                                <button ref={diffBtnRefs[2]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game','hard'); }}>Hard</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -483,6 +635,11 @@ const App = () => {
                             SCORE <span id="score">{score}</span>
                         </div>
 
+                        <div className="mode-ui">
+                            <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>
+                            <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
+                        </div>
+
                         <div id="controls">
                             <div
                                 className="dpad-circle"
@@ -498,6 +655,8 @@ const App = () => {
 
             {gameState === 'WEB_GAME' && (
                 <>
+                    {/* Mode banner shows active mode and difficulty */}
+                    <div className="mode-banner">WEB GAME — {difficulty.toUpperCase()}</div>
                     {/* Web Game Scene - hidden until rover is snapped to surface */}
                     <div style={{
                         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0,
@@ -585,6 +744,20 @@ const App = () => {
                                 );
                             })}
 
+                            {/* Samples (collectibles) */}
+                            {samples.map(s => (
+                                <a-entity key={s.id} position={`${s.x} ${s.y} ${s.z}`}>
+                                    <a-sphere radius="0.05" color="#7bffb2" material="transparent: true; opacity: 0.95" />
+                                </a-entity>
+                            ))}
+
+                            {/* Obstacles (visual only) */}
+                            {obstacles.map(o => (
+                                <a-entity key={o.id} position={`${o.x} ${o.y} ${o.z}`}>
+                                    <a-sphere radius="0.06" color="#ff4d4d" material="transparent: true; opacity: 0.95" />
+                                </a-entity>
+                            ))}
+
                             {/* Rover */}
                             <a-entity
                                 id="rover"
@@ -639,6 +812,11 @@ const App = () => {
                     <div id="ui-overlay" style={{ display: 'block' }}>
                         <div id="score-display">
                             SCORE <span id="score">{score}</span>
+                        </div>
+
+                        <div className="mode-ui">
+                            <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>
+                            <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
                         </div>
 
                         <div id="controls">
