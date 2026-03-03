@@ -42,14 +42,12 @@ const App = () => {
     const obstaclesRef = useRef<typeof obstacles>([]);
     obstaclesRef.current = obstacles;
 
-    // Energy meter (0..100) - skeleton only (no draining logic)
+    // Energy meter (0..100) - skeleton only
     const [energy, setEnergy] = useState(100);
     const [showDifficulty, setShowDifficulty] = useState(false);
-    /**
-     * Centralized difficulty configuration placeholder.
-     * Add mode-specific settings here (spawn counts, multipliers, timers) so
-     * different modes can be wired up easily later without changing logic.
-     */
+    
+    // Centralized difficulty configuration placeholder.
+     
     const difficultyConfig: Record<string, any> = {
         easy: { spawnCount: 4, scoreMultiplier: 0.8 },
         normal: { spawnCount: 6, scoreMultiplier: 1.0 },
@@ -67,7 +65,7 @@ const App = () => {
     const moveLoopId = useRef<number | null>(null);
     const lastMoveTime = useRef(0);
     const prevCamUp = useRef<any>(null);
-    // Refs for keyboard navigation
+    // Keyboard navigation
     const playBtnRef = useRef<HTMLButtonElement | null>(null);
     const arBtnRef = useRef<HTMLButtonElement | null>(null);
     const diffBtnRefs = [useRef<HTMLButtonElement | null>(null), useRef<HTMLButtonElement | null>(null), useRef<HTMLButtonElement | null>(null)];
@@ -152,9 +150,6 @@ const App = () => {
         if (!THREE || !rover) return;
 
         const currentPos = rover.getAttribute('position');
-        // Preserve raw input direction for orientation; difficulty-specific
-        // behavior is intentionally not applied here yet. Use `difficultyConfig`
-        // to drive future per-mode changes.
         lastDirectionRef.current = [inputX, inputY];
 
         /* Convert screen-space input to world-space direction via camera frame. */
@@ -205,7 +200,7 @@ const App = () => {
     }, [gameState]);
 
     /**
-     * Global keyboard handlers: Escape closes modal; focus management when modal opens.
+     * Global keyboard handlers
      */
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
