@@ -69,6 +69,7 @@ const App = () => {
     const playBtnRef = useRef<HTMLButtonElement | null>(null);
     const arBtnRef = useRef<HTMLButtonElement | null>(null);
     const diffBtnRefs = [useRef<HTMLButtonElement | null>(null), useRef<HTMLButtonElement | null>(null), useRef<HTMLButtonElement | null>(null)];
+	const [waypointPopup, setWaypointPopup] = useState<{title: string; body?: string; image?: string;} | null>(null);
 
     /** Initialize WASM and load asteroid collision mesh from GLB. */
     useEffect(() => {
@@ -193,6 +194,15 @@ const App = () => {
                 setSamples(prev => prev.filter(s => !collectedSamples.find(c => c.id === s.id)));
                 setSamplesCollected(c => c + collectedSamples.length);
                 setScore(s => s + collectedSamples.length * 150);
+                setWaypointPopup({
+                    title: "Sample Collected!",
+                    body: `
+                    One of the most intriguing objects in the main asteroid belt, Psyche is a giant metal rich asteroid, about three times farther away from the Sun than is Earth.
+
+                    Psyche has an irregular, potato-like shape. If it were sliced in half horizontally at the equator – picture a squished oval – it would measure 173 miles (280 kilometers) across at its widest point and 144 miles (232 kilometers) long. Its surface area is 64,000 square miles (165,800 square kilometers).
+                    `,
+                    image:"./images/psycherock.jpg"
+                });
             }
         } catch (e) {
             console.error("Movement error:", e);
@@ -253,7 +263,7 @@ const App = () => {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [gameState, showDifficulty]);
-
+	
     /** Aligns rover to surface normal with forward direction projected onto tangent plane. */
     const updateRoverRotation = (rover: any, x: number, y: number, z: number, dirX: number, dirY: number, dirZ: number) => {
         const THREE = (window as any).THREE;
@@ -808,12 +818,42 @@ const App = () => {
                         <div id="score-display">
                             SCORE <span id="score">{score}</span>
                         </div>
-
                         <div className="mode-ui">
                             <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>
                             <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
                         </div>
+                        {/* WAYPOINT POPUP */}
+                        {waypointPopup && (
+                            <div
+                                id="waypoint-popup"
+                                role="dialog"
+                                aria-modal="true"
+                                onClick={() => setWaypointPopup(null)}
+                            >
+                                <div
+                                    className="popup-container"
+                                    /* Closes the popup on click */
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                
+                                    {waypointPopup.image && (
+                                        <div className="popup-image-panel">
+                                            <img src={waypointPopup.image} alt="Waypoint visual" />
+                                        </div>
+                                    )}
 
+                                    <div className="popup-text-panel">
+                                        <div className="waypoint-popup-title">{waypointPopup.title}</div>
+
+                                        {waypointPopup.body && (
+                                            <div className="waypoint-popup-body">{waypointPopup.body}</div>
+                                        )}
+
+                                        <div className="popup-hint">Click outside to close</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div id="controls">
                             <div
                                 className="dpad-circle"
