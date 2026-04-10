@@ -21,6 +21,8 @@ const rotationFromNormal = (nx: number, ny: number, nz: number): string => {
     return `${e.x * 180 / Math.PI} ${e.y * 180 / Math.PI} ${e.z * 180 / Math.PI}`;
 };
 
+const MOVE_INTERVAL = 33; // ms between movement ticks (~30 fps)
+
 /** World-space directions for raycasting waypoint positions on the asteroid surface. */
 const WAYPOINT_DIRECTIONS: [number, number, number][] = [
     [0.707, 0, 0.707], [-0.707, 0.2, 0.707], [0, 0.707, 0.707], [0, -0.707, 0.707],
@@ -65,6 +67,10 @@ const App = () => {
     const moveLoopId = useRef<number | null>(null);
     const lastMoveTime = useRef(0);
     const prevCamUp = useRef<any>(null);
+    const energyRef = useRef(100);
+    energyRef.current = energy;
+    const modeCfgRef = useRef(modeCfg);
+    modeCfgRef.current = modeCfg;
     // Keyboard navigation
     const playBtnRef = useRef<HTMLButtonElement | null>(null);
     const arBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -145,6 +151,7 @@ const App = () => {
     /** Advances rover one step: projects input onto tangent plane, raycasts to surface, updates position and camera. */
     const moveRover = useCallback((inputX: number, inputY: number) => {
         if (gameState !== 'WEB_GAME' && gameState !== 'AR_MODE') return;
+        if (modeCfgRef.current.energyEnabled && energyRef.current <= 0) return;
 
         const THREE = (window as any).THREE;
         const rover = document.getElementById('rover') as any;
@@ -171,6 +178,13 @@ const App = () => {
 
             updateRoverRotation(rover, result.position[0], result.position[1], result.position[2], moveDir.x, moveDir.y, moveDir.z);
             updateCamera(result.position[0], result.position[1], result.position[2]);
+
+            /* Drain energy on successful movement tick. */
+            if (modeCfgRef.current.energyEnabled) {
+                const drained = Math.max(0, energyRef.current - modeCfgRef.current.energyDrainPerSec * (MOVE_INTERVAL / 1000));
+                energyRef.current = drained;
+                setEnergy(drained);
+            }
 
             /* Check waypoint collection within radius (waypoints + samples). */
             const COLLECTION_RADIUS = 0.25;
@@ -314,7 +328,6 @@ const App = () => {
 
     /** Movement loop: merges keyboard and D-pad input, throttles to ~30 moves/sec. */
     const movementLoop = useCallback((timestamp: number) => {
-        const MOVE_INTERVAL = 33;
         if (timestamp - lastMoveTime.current >= MOVE_INTERVAL) {
             lastMoveTime.current = timestamp;
 
@@ -413,7 +426,7 @@ const App = () => {
                 }
                 setObstacles(obsList);
 
-                // Energy meter (skeleton): initialize to full. Implementation left for later.
+                energyRef.current = 100;
                 setEnergy(100);
             } else {
                 setWaypoints([]);
@@ -641,7 +654,7 @@ const App = () => {
                         </div>
 
                         <div className="mode-ui">
-                            <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>
+                            {modeCfg.energyEnabled && <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>}
                             <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
                         </div>
 
@@ -819,7 +832,7 @@ const App = () => {
                             SCORE <span id="score">{score}</span>
                         </div>
                         <div className="mode-ui">
-                            <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>
+                            {modeCfg.energyEnabled && <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>}
                             <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
                         </div>
                         {/* WAYPOINT POPUP */}
