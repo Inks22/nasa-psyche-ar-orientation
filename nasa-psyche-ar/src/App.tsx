@@ -176,6 +176,158 @@ const App = () => {
         return { right, up, normal };
     };
 
+    const popups = [
+        {
+            title: 'One Sample Collected!',
+            body: `
+            Psyche is an asteroid between Mars and Jupiter and the name of a NASA space mission to visit that asteroid, led by ASU. Psyche is the first mission to a world likely made largely of metal rather than rock or ice.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Two Samples Collected',
+            body: `
+            Judging from data obtained by Earth-based radar and optical telescopes, scientists hypothesize that the asteroid Psyche could be part of the metal-rich interior of a planetesimal that lost its outer rocky shell.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Three Samples Collected',
+            body: `
+            Previously, the consensus of the science community was that asteroid Psyche was almost entirely metal. New data on density, radar properties, and spectral signatures indicate that the asteroid is possibly a mixed metal and rock world.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Four Samples Collected',
+            body: `
+            Humans can’t bore a path to Earth’s metal core – or the cores of the other rocky planets – so visiting Psyche could provide a one-of-a-kind window into the history of violent collisions and accumulation of matter that created planets like our own.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Five Samples Collected',
+            body: `
+            While rocks on Mars, Venus, and Earth are flush with iron oxides, Psyche’s surface – at least when studied from afar – doesn’t seem to feature much of these chemical compounds.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Six Samples Collected',
+            body: `
+            If the asteroid is leftover core material from a planetary building block, scientists look forward to learning how its history resembles and diverges from that of the rocky planets.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Seven Samples Collected',
+            body: `
+            The surface gravity on Psyche is much less than on Earth, and even less than on the Moon. On Psyche, lifting a car would feel as light as lifting a big dog on Earth!
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Eight Samples Collected',
+            body: `
+            The Psyche spacecraft includes three instruments: a magnetometer, multispectral imager, and gamma ray and neutron spectrometer.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Nine Samples Collected',
+            body: `
+            Psyche’s magnetometer will look for evidence of an ancient magnetic field at the asteroid Psyche. A residual magnetic field would be strong evidence the asteroid formed from the core of a planetary body.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Ten Samples Collected',
+            body: `
+            The orbiter’s gamma-ray and neutron spectrometer will help scientists determine the chemical elements that make up the asteroid.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Eleven Samples Collected',
+            body: `
+            The spacecraft’s multispectral imager will provide information about the mineral composition of Psyche as well as its topography. 
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Twelve Samples Collected',
+            body: `
+            By analyzing the radio waves the spacecraft communicates with, scientists can measure how the asteroid Psyche affects the spacecraft’s orbit. From that information, scientists can determine the asteroid’s rotation, mass, and gravity field.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Thirteen Samples Collected',
+            body: `
+            The Psyche spacecraft will use a special kind of super-efficient propulsion system for the first time beyond the Moon.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Fourteen Samples Collected',
+            body: `
+            Powered by Hall-effect thrusters, Psyche’s solar electric propulsion system harnesses energy from large solar arrays to create electric and magnetic fields.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Fifteen Samples Collected',
+            body: `
+            The electric and magnetic fields accelerate and expel charged atoms, or ions, of a propellant called xenon. The plasma will emit a sci-fi-like blue glow.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Sixteen Samples Collected',
+            body: `
+            Each of Psyche’s four thrusters, which will operate only one at a time, exert at most the same amount of force that one AA battery would exert on the palm of your hand.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Seventeen Samples Collected',
+            body: `
+            Over time, in the frictionless void of space, the spacecraft will slowly and continuously accelerate.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Eighteen Samples Collected',
+            body: `
+            NASA’s Jet Propulsion Laboratory in Southern California, a leader in robotic exploration of the solar system, manages the mission for the agency’s Science Mission Directorate in Washington.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Nineteen Samples Collected',
+            body: `
+            Psyche launched at 10:19 a.m. EDT Friday, October 13, 2023 aboard a SpaceX Falcon Heavy rocket from Launch Pad 39A at NASA’s Kennedy Space Center in Florida.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Twenty Samples Collected',
+            body: `
+            From launch to arrival at the first science orbit around the asteroid, the spacecraft will travel approximately 1.5 billion miles.
+            `,
+            image: "./images/psycherock.jpg"
+        },
+        {
+            title: 'Twenty Samples Collected',
+            body: `
+            From launch to arrival at the first science orbit around the asteroid, the spacecraft will travel approximately 1.5 billion miles!
+            `,
+            image: "./images/psycherock.jpg"
+        }
+    ];
+
+    let popupIndex = 0;
+
     /** Advances rover one step: projects input onto tangent plane, raycasts to surface, updates position and camera. */
     const moveRover = useCallback((inputX: number, inputY: number) => {
         if (gameState !== 'WEB_GAME' && gameState !== 'AR_MODE') return;
@@ -236,15 +388,10 @@ const App = () => {
                 setSamples(prev => prev.filter(s => !collectedSamples.find(c => c.id === s.id)));
                 setSamplesCollected(c => c + collectedSamples.length);
                 setScore(s => s + collectedSamples.length * 150);
-                setWaypointPopup({
-                    title: "Sample Collected!",
-                    body: `
-                    One of the most intriguing objects in the main asteroid belt, Psyche is a giant metal rich asteroid, about three times farther away from the Sun than is Earth.
+                const popup = popups[popupIndex];
+                setWaypointPopup(popup);
+                popupIndex = popupIndex + 1;
 
-                    Psyche has an irregular, potato-like shape. If it were sliced in half horizontally at the equator – picture a squished oval – it would measure 173 miles (280 kilometers) across at its widest point and 144 miles (232 kilometers) long. Its surface area is 64,000 square miles (165,800 square kilometers).
-                    `,
-                    image:"./images/psycherock.jpg"
-                });
             }
         } catch (e) {
             console.error("Movement error:", e);
