@@ -23,6 +23,34 @@ const rotationFromNormal = (nx: number, ny: number, nz: number): string => {
 
 const MOVE_INTERVAL = 33; // ms between movement ticks (~30 fps)
 
+/** Generates star data with uniform random distribution across a surrounding sphere. */
+const generateStars = (count: number) => {
+    const COLORS = ['#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#00d4ff', '#7b2cbf'];
+    const RADIUS = 120;
+    // Simple seeded LCG for fully deterministic placement and variation
+    let seed = 42;
+    const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
+    return Array.from({ length: count }, (_, i) => {
+        const phi    = Math.acos(2 * rand() - 1);       // uniform latitude (0..π)
+        const theta  = 2 * Math.PI * rand();             // uniform longitude (0..2π)
+        const radius = RADIUS + (rand() - 0.5) * 24;    // ±12 units of depth jitter
+        const x    = Math.sin(phi) * Math.cos(theta) * radius;
+        const yPos = Math.cos(phi) * radius;
+        const z    = Math.sin(phi) * Math.sin(theta) * radius;
+        return {
+            id: i,
+            pos: `${x.toFixed(2)} ${yPos.toFixed(2)} ${z.toFixed(2)}`,
+            radius: 0.3 + rand() * 0.4,
+            color: COLORS[Math.floor(rand() * COLORS.length)],
+            opacity: 0.7 + rand() * 0.3,
+            dur: Math.round(2000 + rand() * 3000),
+            delay: Math.round(rand() * 2000),
+        };
+    });
+};
+
+const STARS = generateStars(250);
+
 /** World-space directions for raycasting waypoint positions on the asteroid surface. */
 const WAYPOINT_DIRECTIONS: [number, number, number][] = [
     [0.707, 0, 0.707], [-0.707, 0.2, 0.707], [0, 0.707, 0.707], [0, -0.707, 0.707],
@@ -705,14 +733,20 @@ const App = () => {
                             <a-light type="point" color="#FFFFFF" intensity="0.4" position="-3 2 3"></a-light>
                             <a-light type="point" color="#FFFFFF" intensity="0.4" position="0 -2 -5"></a-light>
 
-                            {/* Space background */}
+                            {/* Space background — stars distributed across full surrounding sphere */}
                             <a-entity>
-                                <a-sphere position="8 5 -12" radius="0.08" color="#FFFFFF"></a-sphere>
-                                <a-sphere position="-9 6 -15" radius="0.06" color="#FFFFFF"></a-sphere>
-                                <a-sphere position="10 -4 -13" radius="0.07" color="#FFFFFF"></a-sphere>
-                                <a-sphere position="-8 -5 -11" radius="0.05" color="#FFFFFF"></a-sphere>
-                                <a-sphere position="7 8 -16" radius="0.06" color="#00d4ff" opacity="0.8"></a-sphere>
-                                <a-sphere position="-10 3 -14" radius="0.08" color="#7b2cbf" opacity="0.7"></a-sphere>
+                                {STARS.map(s => (
+                                    <a-sphere
+                                        key={s.id}
+                                        position={s.pos}
+                                        radius={s.radius}
+                                        color={s.color}
+                                        opacity={s.opacity}
+                                        material="shader: flat"
+                                        animation={`property: scale; from: 1 1 1; to: 1.1 1.1 1.1; loop: true; dir: alternate; dur: ${s.dur}; delay: ${s.delay}; easing: easeInOutSine`}
+                                        animation__opacity={`property: material.opacity; from: ${s.opacity}; to: ${(s.opacity * 0.3).toFixed(2)}; loop: true; dir: alternate; dur: ${Math.round(s.dur * 0.7)}; delay: ${s.delay}; easing: easeInOutSine`}
+                                    ></a-sphere>
+                                ))}
                             </a-entity>
 
                             {/* VISUAL ASTEROID */}
