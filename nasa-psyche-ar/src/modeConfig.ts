@@ -8,9 +8,9 @@ export interface ModeFeatures {
 }
 
 export const MODE_CONFIG: Record<Difficulty, ModeFeatures> = {
-  easy: { spawnSamples: 3, spawnObstacles: 1, energyEnabled: false, energyDrainPerSec: 0 },
-  normal: { spawnSamples: 5, spawnObstacles: 2, energyEnabled: true, energyDrainPerSec: 0.833 },
-  hard: { spawnSamples: 8, spawnObstacles: 4, energyEnabled: true, energyDrainPerSec: 0.833 },
+  easy: { spawnSamples: 20, spawnObstacles: 1, energyEnabled: false, energyDrainPerSec: 0 },
+  normal: { spawnSamples: 20, spawnObstacles: 2, energyEnabled: true, energyDrainPerSec: 0.833 },
+  hard: { spawnSamples: 20, spawnObstacles: 4, energyEnabled: true, energyDrainPerSec: 0.833 },
 };
 
 export default MODE_CONFIG;
