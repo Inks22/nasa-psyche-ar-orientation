@@ -7,18 +7,16 @@ import MODE_CONFIG, { Difficulty } from './modeConfig';
 // @ts-ignore
 import init, { start_ar_session, load_collision_mesh, move_rover_on_asteroid, get_surface_point_in_direction } from '../rust_engine/pkg/rust_engine';
 
-/** Converts surface normal (nx, ny, nz) to A-Frame Euler rotation string for cylinder alignment. */
-const rotationFromNormal = (nx: number, ny: number, nz: number): string => {
-    const THREE = (window as any).THREE;
-    if (!THREE) return "0 0 0";
-    const y = new THREE.Vector3(nx, ny, nz).normalize();
-    let z = new THREE.Vector3(0, 0, 1);
-    if (Math.abs(y.dot(z)) > 0.99) z.set(1, 0, 0);
-    const x = new THREE.Vector3().crossVectors(y, z).normalize();
-    z = new THREE.Vector3().crossVectors(x, y).normalize();
-    const m = new THREE.Matrix4().makeBasis(x, y, z);
-    const e = new THREE.Euler().setFromRotationMatrix(m, 'YXZ');
-    return `${e.x * 180 / Math.PI} ${e.y * 180 / Math.PI} ${e.z * 180 / Math.PI}`;
+/** Returns a uniformly distributed random unit vector on the sphere via rejection sampling. */
+const randomUnitVector = (): [number, number, number] => {
+    let x: number, y: number, z: number, len: number;
+    do {
+        x = Math.random() * 2 - 1;
+        y = Math.random() * 2 - 1;
+        z = Math.random() * 2 - 1;
+        len = Math.sqrt(x * x + y * y + z * z);
+    } while (len === 0 || len > 1);
+    return [x / len, y / len, z / len];
 };
 
 const MOVE_INTERVAL = 33; // ms between movement ticks (~30 fps)
@@ -86,10 +84,7 @@ const App = () => {
     const [scanPrompt, setScanPrompt] = useState(true);
     const [meshLoaded, setMeshLoaded] = useState(false);
     const [roverReady, setRoverReady] = useState(false);
-    const [waypoints, setWaypoints] = useState<{ id: string; x: number; y: number; z: number; nx: number; ny: number; nz: number }[]>([]);
     const lastDirectionRef = useRef<[number, number]>([0, 1]);
-    const waypointsRef = useRef<{ id: string; x: number; y: number; z: number; nx: number; ny: number; nz: number }[]>([]);
-    waypointsRef.current = waypoints;
     const keysHeld = useRef(new Set<string>());
     const dpadInputRef = useRef<[number, number]>([0, 0]);
     const moveLoopId = useRef<number | null>(null);
@@ -359,6 +354,51 @@ const App = () => {
             updateRoverRotation(rover, result.position[0], result.position[1], result.position[2], moveDir.x, moveDir.y, moveDir.z);
             updateCamera(result.position[0], result.position[1], result.position[2]);
 
+            /* Update sample indicator arrow. */
+            const arrowEl = document.getElementById('sample-arrow') as any;
+            if (arrowEl) {
+                const currentSamples = samplesRef.current;
+                if (currentSamples.length === 0) {
+                    arrowEl.setAttribute('visible', 'false');
+                } else {
+                    const rx2 = result.position[0], ry2 = result.position[1], rz2 = result.position[2];
+                    let nearest = currentSamples[0];
+                    let nearestDist2 = Infinity;
+                    for (const s of currentSamples) {
+                        const dx = s.x - rx2, dy = s.y - ry2, dz = s.z - rz2;
+                        const d2 = dx * dx + dy * dy + dz * dz;
+                        if (d2 < nearestDist2) { nearestDist2 = d2; nearest = s; }
+                    }
+
+                    const roverVec = new THREE.Vector3(rx2, ry2, rz2);
+                    const normal = roverVec.clone().normalize();
+
+                    // Tangent-plane direction toward nearest sample
+                    const toSample = new THREE.Vector3(nearest.x - rx2, nearest.y - ry2, nearest.z - rz2).normalize();
+                    const projected = toSample.clone().addScaledVector(normal, -toSample.dot(normal)).normalize();
+
+                    if (projected.lengthSq() > 0.001) {
+                        // Orbit: place arrow at fixed radius around rover in the sample's direction
+                        const ORBIT_RADIUS = 0.20;
+                        const arrowPos = roverVec.clone()
+                            .addScaledVector(projected, ORBIT_RADIUS)
+                            .addScaledVector(normal, 0.04);
+                        arrowEl.setAttribute('position', `${arrowPos.x} ${arrowPos.y} ${arrowPos.z}`);
+
+                        // Align arrow apex (+Y) with the projected direction (pointing away from rover)
+                        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), projected);
+                        const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+                        arrowEl.setAttribute('rotation', {
+                            x: e.x * 180 / Math.PI,
+                            y: e.y * 180 / Math.PI,
+                            z: e.z * 180 / Math.PI,
+                        });
+                    }
+
+                    arrowEl.setAttribute('visible', 'true');
+                }
+            }
+
             /* Drain energy on successful movement tick. */
             if (modeCfgRef.current.energyEnabled) {
                 const drained = Math.max(0, energyRef.current - modeCfgRef.current.energyDrainPerSec * (MOVE_INTERVAL / 1000));
@@ -366,18 +406,9 @@ const App = () => {
                 setEnergy(drained);
             }
 
-            /* Check waypoint collection within radius (waypoints + samples). */
+            /* Check sample collection within radius. */
             const COLLECTION_RADIUS = 0.25;
             const rx = result.position[0], ry = result.position[1], rz = result.position[2];
-            const wps = waypointsRef.current;
-            const collected = wps.filter(wp => {
-                const dx = wp.x - rx, dy = wp.y - ry, dz = wp.z - rz;
-                return dx * dx + dy * dy + dz * dz < COLLECTION_RADIUS * COLLECTION_RADIUS;
-            });
-            if (collected.length > 0) {
-                setWaypoints(prev => prev.filter(wp => !collected.find(c => c.id === wp.id)));
-                setScore(s => s + collected.length * 100);
-            }
             // samples
             const sps = samplesRef.current;
             const collectedSamples = sps.filter(s => {
@@ -558,37 +589,28 @@ const App = () => {
         dpadInputRef.current = [0, 0];
     }, []);
 
-    /** On game start: reset state and spawn waypoints (WEB_GAME only). */
+    /** On game start: reset state and spawn samples/obstacles (WEB_GAME only). */
     useEffect(() => {
         if (gameState === 'WEB_GAME' || gameState === 'AR_MODE') {
             setRoverReady(false);
             setScore(0);
             prevCamUp.current = null;
             if (meshLoaded && gameState === 'WEB_GAME') {
-                // spawn waypoints (existing) and samples/obstacles based on mode config
-                const wps: { id: string; x: number; y: number; z: number; nx: number; ny: number; nz: number }[] = [];
-                WAYPOINT_DIRECTIONS.forEach(([dx, dy, dz], i) => {
-                    try {
-                        const r = get_surface_point_in_direction(dx, dy, dz);
-                        wps.push({
-                            id: `wp-${i}`,
-                            x: r.position[0], y: r.position[1], z: r.position[2],
-                            nx: r.normal[0], ny: r.normal[1], nz: r.normal[2]
-                        });
-                    } catch (_) { /* Raycast missed; skip this waypoint. */ }
-                });
-                setWaypoints(wps);
-
-                // Samples
+                // Samples — randomly placed on the asteroid surface; retry on raycast miss
                 const sampleList: { id: string; x: number; y: number; z: number }[] = [];
-                for (let i = 0; i < modeCfg.spawnSamples; i++) {
-                    const dir = WAYPOINT_DIRECTIONS[i % WAYPOINT_DIRECTIONS.length];
+                const MAX_ATTEMPTS = modeCfg.spawnSamples * 10;
+                let attempts = 0;
+                while (sampleList.length < modeCfg.spawnSamples && attempts < MAX_ATTEMPTS) {
+                    attempts++;
+                    const dir = randomUnitVector();
                     try {
                         const r = get_surface_point_in_direction(dir[0], dir[1], dir[2]);
-                        sampleList.push({ id: `s-${i}`, x: r.position[0], y: r.position[1], z: r.position[2] });
+                        sampleList.push({ id: `s-${sampleList.length}`, x: r.position[0], y: r.position[1], z: r.position[2] });
                     } catch (_) { }
                 }
                 setSamples(sampleList);
+                const arrowElStart = document.getElementById('sample-arrow') as any;
+                if (arrowElStart) arrowElStart.setAttribute('visible', 'true');
 
                 // Obstacles (visual only for now)
                 const obsList: { id: string; x: number; y: number; z: number }[] = [];
@@ -604,9 +626,10 @@ const App = () => {
                 energyRef.current = 100;
                 setEnergy(100);
             } else {
-                setWaypoints([]);
                 setSamples([]);
                 setObstacles([]);
+                const arrowElStop = document.getElementById('sample-arrow') as any;
+                if (arrowElStop) arrowElStop.setAttribute('visible', 'false');
             }
         }
     }, [gameState, meshLoaded]);
@@ -924,25 +947,6 @@ const App = () => {
                                 ></a-gltf-model>
                             </a-entity>
 
-                            {/* Waypoints */}
-                            {waypoints.map((wp) => {
-                                const h = 0.5;
-                                const cx = 0.5 * wp.nx, cy = 0.5 * wp.ny, cz = 0.5 * wp.nz;
-                                return (
-                                    <a-entity key={wp.id} position={`${wp.x} ${wp.y} ${wp.z}`}>
-                                        <a-sphere radius="0.04" color="#FFD700" material="transparent: true; opacity: 0.7" />
-                                        <a-cylinder
-                                            radius="0.015"
-                                            height={h}
-                                            color="#FFD700"
-                                            material="transparent: true; opacity: 0.6"
-                                            position={`${cx * 0.5} ${cy * 0.5} ${cz * 0.5}`}
-                                            rotation={rotationFromNormal(wp.nx, wp.ny, wp.nz)}
-                                        />
-                                    </a-entity>
-                                );
-                            })}
-
                             {/* Samples (collectibles) */}
                             {samples.map(s => (
                                 <a-entity key={s.id} position={`${s.x} ${s.y} ${s.z}`}>
@@ -956,6 +960,31 @@ const App = () => {
                                     <a-sphere radius="0.06" color="#ff4d4d" material="transparent: true; opacity: 0.95" />
                                 </a-entity>
                             ))}
+
+                            {/* Sample indicator arrow — orbits rover in tangent plane toward nearest sample */}
+                            <a-entity id="sample-arrow" visible="false">
+                                <a-entity animation="property: scale; from: 1 1 1; to: 1.35 1.35 1.35; loop: true; dir: alternate; dur: 500; easing: easeInOutSine">
+                                    {/* Arrowhead */}
+                                    <a-cone
+                                        height="0.09"
+                                        radius-bottom="0.05"
+                                        radius-top="0"
+                                        color="#FFD700"
+                                        position="0 0.1 0"
+                                        material="emissive: #FFD700; emissiveIntensity: 0.55; transparent: true; opacity: 0.95"
+                                        animation="property: material.opacity; from: 0.95; to: 0.3; loop: true; dir: alternate; dur: 500; easing: easeInOutSine"
+                                    />
+                                    {/* Shaft */}
+                                    <a-cylinder
+                                        radius="0.013"
+                                        height="0.11"
+                                        color="#FFD700"
+                                        position="0 0.02 0"
+                                        material="emissive: #FFD700; emissiveIntensity: 0.35; transparent: true; opacity: 0.8"
+                                        animation="property: material.opacity; from: 0.8; to: 0.2; loop: true; dir: alternate; dur: 500; easing: easeInOutSine"
+                                    />
+                                </a-entity>
+                            </a-entity>
 
                             {/* Rover */}
                             <a-entity
