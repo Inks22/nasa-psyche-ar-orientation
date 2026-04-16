@@ -55,6 +55,7 @@ const WAYPOINT_DIRECTIONS: [number, number, number][] = [
     [0.707, 0.707, 0], [-0.707, 0.5, -0.5], [0, 0, -1], [0.5, -0.707, -0.5],
 ];
 
+<<<<<<< HEAD
 const INTRO_CONTENT: Record<string, { welcome: string; description: string }> = {
     easy: {
         welcome: 'Welcome to Story Mode',
@@ -69,6 +70,19 @@ const INTRO_CONTENT: Record<string, { welcome: string; description: string }> = 
         description: "Psyche is at its most unforgiving. Energy drains your battery, and craters larger than the rover are scattered across the surface — driving into one cuts your speed in half. Navigate carefully, collect samples quickly, and use the indicator arrow wisely. The mission ends when you collect all 20 samples or run out of energy.",
     },
 };
+=======
+const OBSTACLE_DIRECTIONS: [number, number, number, number][] = [
+    [0.6849, 2.2127, -1.16, 1.15],
+    [-0.6158, 2.7743, 0.4824, .8],
+    [1.68, 0.35, 2.861, .26],
+    [2.9, 1.65, 0.633, 0.27],
+    [3.3426, -0.4972, 0.08, 0.35],
+    [1.9917, 2.33, 1.4612, 0.24],
+    [-3.5883, -0.1327, -.01, .35],
+    [-0.4975, -0.5, 2.7357, 0.24],
+    [-1.21, -1.4, 1.6656, 0.35],
+];
+>>>>>>> feature/obstacles
 
 const App = () => {
     const [gameState, setGameState] = useState('MENU');
@@ -81,7 +95,7 @@ const App = () => {
     samplesRef.current = samples;
     const [samplesCollected, setSamplesCollected] = useState(0);
 
-    const [obstacles, setObstacles] = useState<{ id: string; x: number; y: number; z: number }[]>([]);
+    const [obstacles, setObstacles] = useState<{ id: string; x: number; y: number; z: number; radius: number}[]>([]);
     const obstaclesRef = useRef<typeof obstacles>([]);
     obstaclesRef.current = obstacles;
 
@@ -381,7 +395,25 @@ const App = () => {
 
         /* Convert screen-space input to world-space direction via camera frame. */
         const { right, up } = getCameraFrame(currentPos.x, currentPos.y, currentPos.z);
-        const moveDir = up.clone().multiplyScalar(inputY).addScaledVector(right, inputX);
+        let moveDir = up.clone().multiplyScalar(inputY).addScaledVector(right, inputX);
+        let obstacleDrainMultiplier = 1.0;
+
+        if(difficulty == 'normal' || difficulty == 'hard') {
+            const cx = currentPos.x, cy = currentPos.y, cz = currentPos.z;
+            const obs = obstaclesRef.current;
+            const isCollidingWithObstacle = obs.some(o => {
+                const dx = o.x - cx;
+                const dy = o.y - cy;
+                const dz = o.z - cz;
+                return dx * dx + dy * dy + dz * dz < o.radius * o.radius;
+            });
+
+            const speedMultiplier = isCollidingWithObstacle ? 0.5 : 1.0;
+            obstacleDrainMultiplier = isCollidingWithObstacle && difficulty == 'hard' ? 20 : 1.0;
+
+            moveDir = moveDir.clone().multiplyScalar(speedMultiplier);
+        }
+        
 
         try {
             const result = move_rover_on_asteroid(
@@ -394,7 +426,7 @@ const App = () => {
                 y: result.position[1],
                 z: result.position[2]
             });
-
+            
             updateRoverRotation(rover, result.position[0], result.position[1], result.position[2], moveDir.x, moveDir.y, moveDir.z);
             updateCamera(result.position[0], result.position[1], result.position[2]);
 
@@ -445,13 +477,17 @@ const App = () => {
 
             /* Drain energy on successful movement tick. */
             if (modeCfgRef.current.energyEnabled) {
-                const drained = Math.max(0, energyRef.current - modeCfgRef.current.energyDrainPerSec * (MOVE_INTERVAL / 1000));
+                const drained = Math.max(0, energyRef.current - modeCfgRef.current.energyDrainPerSec * obstacleDrainMultiplier * (MOVE_INTERVAL / 1000));
                 energyRef.current = drained;
                 setEnergy(drained);
             }
+<<<<<<< HEAD
 
             /* Check sample collection within radius. */
+=======
+>>>>>>> feature/obstacles
             const COLLECTION_RADIUS = 0.25;
+            /* Check waypoint collection within radius (waypoints + samples). */
             const rx = result.position[0], ry = result.position[1], rz = result.position[2];
             // samples
             const sps = samplesRef.current;
@@ -468,6 +504,8 @@ const App = () => {
                 popupIndex = popupIndex + 1;
 
             }
+
+            
         } catch (e) {
             console.error("Movement error:", e);
         }
@@ -670,14 +708,21 @@ const App = () => {
                 if (arrowElStart) arrowElStart.setAttribute('visible', 'true');
 
                 // Obstacles (visual only for now)
-                const obsList: { id: string; x: number; y: number; z: number }[] = [];
-                for (let i = 0; i < modeCfg.spawnObstacles; i++) {
-                    const dir = WAYPOINT_DIRECTIONS[(i + 3) % WAYPOINT_DIRECTIONS.length];
+                const obsList: { id: string; x: number; y: number; z: number; radius: number}[] = [];
+                for (let i = 0; i < OBSTACLE_DIRECTIONS.length; i++) {
+                    const [dx, dy, dz, radius] = OBSTACLE_DIRECTIONS[i % OBSTACLE_DIRECTIONS.length];
+                    
                     try {
-                        const r = get_surface_point_in_direction(dir[0], dir[1], dir[2]);
-                        obsList.push({ id: `o-${i}`, x: r.position[0], y: r.position[1], z: r.position[2] });
-                    } catch (_) { }
-                }
+                        const r = get_surface_point_in_direction(dx, dy, dz);
+                        obsList.push({
+                            id: `o-${i}`,
+                            x: r.position[0],
+                            y: r.position[1],
+                            z: r.position[2],
+                            radius,
+                        });
+                    } catch (_) {}
+                }          
                 setObstacles(obsList);
 
                 energyRef.current = 100;
@@ -1064,7 +1109,7 @@ const App = () => {
                             {/* Obstacles (visual only) */}
                             {obstacles.map(o => (
                                 <a-entity key={o.id} position={`${o.x} ${o.y} ${o.z}`}>
-                                    <a-sphere radius="0.06" color="#ff4d4d" material="transparent: true; opacity: 0.95" />
+                                    <a-sphere radius={o.radius} color="#ff4d4d" material="transparent: true; opacity: 0.6" />
                                 </a-entity>
                             ))}
 
