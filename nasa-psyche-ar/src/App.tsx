@@ -20,6 +20,7 @@ const randomUnitVector = (): [number, number, number] => {
 };
 
 const MOVE_INTERVAL = 33; // ms between movement ticks (~30 fps)
+const MAX_ENERGY = 50;
 
 /** Generates star data with uniform random distribution across a surrounding sphere. */
 const generateStars = (count: number) => {
@@ -61,12 +62,12 @@ const INTRO_CONTENT: Record<string, { welcome: string; description: string }> = 
         description: 'Explore the surface of asteroid Psyche with complete freedom. Pilot the rover across the terrain and drive over samples to collect them. If you ever get lost, follow the indicator arrow to the nearest sample.',
     },
     normal: {
-        welcome: 'Welcome to Normal Mode',
+        welcome: 'Welcome to Standard Mode',
         description: "Explore Psyche with the energy system in play. Your rover's battery drains as you roam — collect samples efficiently before power runs out. Follow the indicator arrow if you lose track of your next sample. The mission ends when you collect all 20 samples or run out of energy.",
     },
     hard: {
-        welcome: 'Welcome to Hard Mode',
-        description: "Psyche is at its most unforgiving. Energy drains your battery, and craters larger than the rover are scattered across the surface — driving into one cuts your speed in half. Navigate carefully, collect samples quickly, and use the indicator arrow wisely. The mission ends when you collect all 20 samples or run out of energy.",
+        welcome: 'Welcome to Challenge Mode',
+        description: "Psyche is at its most unforgiving. Energy drains your battery, and craters larger than the rover are scattered across the surface — driving into one cuts your speed in half and drains energy faster. Navigate carefully, collect samples quickly, and use the indicator arrow wisely. The mission ends when you collect all 20 samples or run out of energy.",
     },
 };
 const OBSTACLE_DIRECTIONS: [number, number, number, number][] = [
@@ -97,7 +98,7 @@ const App = () => {
     obstaclesRef.current = obstacles;
 
     // Energy meter (0..100) - skeleton only
-    const [energy, setEnergy] = useState(100);
+    const [energy, setEnergy] = useState(MAX_ENERGY);
     const [showDifficulty, setShowDifficulty] = useState(false);
     const [showCredits, setShowCredits] = useState(false);
     const [showIntroPopup, setShowIntroPopup] = useState(false);
@@ -107,6 +108,7 @@ const App = () => {
     const introLockoutTimerRef = useRef<number | null>(null);
     const [showEndScreen, setShowEndScreen] = useState(false);
     const [endReason, setEndReason] = useState<'complete' | 'energy'>('complete');
+    const [energyBonus, setEnergyBonus] = useState(0);
 
     // Centralized difficulty configuration placeholder.
 
@@ -124,8 +126,10 @@ const App = () => {
     const moveLoopId = useRef<number | null>(null);
     const lastMoveTime = useRef(0);
     const prevCamUp = useRef<any>(null);
-    const energyRef = useRef(100);
+    const energyRef = useRef(MAX_ENERGY);
     energyRef.current = energy;
+    const wasInObstacleRef = useRef(false);
+    const endTriggeredRef = useRef(false);
     const modeCfgRef = useRef(modeCfg);
     modeCfgRef.current = modeCfg;
     // Keyboard navigation
@@ -169,8 +173,11 @@ const App = () => {
         setIntroPopupCanClose(false);
         setSamplesCollected(0);
         setScore(0);
-        energyRef.current = 100;
-        setEnergy(100);
+        energyRef.current = MAX_ENERGY;
+        setEnergy(MAX_ENERGY);
+        wasInObstacleRef.current = false;
+        endTriggeredRef.current = false;
+        setEnergyBonus(0);
     };
 
     const handleStart = async (mode: string, chosenDifficulty?: 'easy' | 'normal' | 'hard') => {
@@ -392,7 +399,7 @@ const App = () => {
 
         /* Convert screen-space input to world-space direction via camera frame. */
         const { right, up } = getCameraFrame(currentPos.x, currentPos.y, currentPos.z);
-        let moveDir = up.clone().multiplyScalar(inputY).addScaledVector(right, inputX);
+        let moveDir = up.clone().multiplyScalar(inputY * 0.5).addScaledVector(right, inputX * 0.5);
         let obstacleDrainMultiplier = 1.0;
 
         if(difficulty == 'normal' || difficulty == 'hard') {
@@ -406,7 +413,12 @@ const App = () => {
             });
 
             const speedMultiplier = isCollidingWithObstacle ? 0.5 : 1.0;
-            obstacleDrainMultiplier = isCollidingWithObstacle && difficulty == 'hard' ? 20 : 1.0;
+            obstacleDrainMultiplier = isCollidingWithObstacle ? 6 : 1.0;
+
+            if (isCollidingWithObstacle && !wasInObstacleRef.current) {
+                setScore(s => Math.max(0, s - modeCfgRef.current.obstaclePenalty));
+            }
+            wasInObstacleRef.current = isCollidingWithObstacle;
 
             moveDir = moveDir.clone().multiplyScalar(speedMultiplier);
         }
@@ -492,7 +504,7 @@ const App = () => {
             if (collectedSamples.length > 0) {
                 setSamples(prev => prev.filter(s => !collectedSamples.find(c => c.id === s.id)));
                 setSamplesCollected(c => c + collectedSamples.length);
-                setScore(s => s + collectedSamples.length * 150);
+                setScore(s => s + collectedSamples.length * modeCfgRef.current.samplePoints);
                 const popup = popups[popupIndex];
                 setWaypointPopup(popup);
                 popupIndex = popupIndex + 1;
@@ -685,42 +697,52 @@ const App = () => {
             setScore(0);
             prevCamUp.current = null;
             if (meshLoaded && gameState === 'WEB_GAME') {
-                // Samples — randomly placed on the asteroid surface; retry on raycast miss
+                // Obstacles — spawned first so sample placement can avoid them
+                const obsList: { id: string; x: number; y: number; z: number; radius: number}[] = [];
+                for (let i = 0; i < OBSTACLE_DIRECTIONS.length; i++) {
+                    const [dx, dy, dz, radius] = OBSTACLE_DIRECTIONS[i % OBSTACLE_DIRECTIONS.length];
+                    try {
+                        const r = get_surface_point_in_direction(dx, dy, dz);
+                        obsList.push({ id: `o-${i}`, x: r.position[0], y: r.position[1], z: r.position[2], radius });
+                    } catch (_) {}
+                }
+                setObstacles(obsList);
+
+                // Samples — randomly placed on the asteroid surface, skipping obstacle zones
                 const sampleList: { id: string; x: number; y: number; z: number }[] = [];
-                const MAX_ATTEMPTS = modeCfg.spawnSamples * 10;
+                const MIN_SAMPLE_SPACING = 1.5;
+                const MAX_ATTEMPTS = modeCfg.spawnSamples * 100;
                 let attempts = 0;
                 while (sampleList.length < modeCfg.spawnSamples && attempts < MAX_ATTEMPTS) {
                     attempts++;
                     const dir = randomUnitVector();
                     try {
                         const r = get_surface_point_in_direction(dir[0], dir[1], dir[2]);
-                        sampleList.push({ id: `s-${sampleList.length}`, x: r.position[0], y: r.position[1], z: r.position[2] });
+                        const insideObstacle = obsList.some(o => {
+                            const dx = r.position[0] - o.x;
+                            const dy = r.position[1] - o.y;
+                            const dz = r.position[2] - o.z;
+                            return dx * dx + dy * dy + dz * dz < o.radius * o.radius;
+                        });
+                        const tooClose = sampleList.some(s => {
+                            const dx = r.position[0] - s.x;
+                            const dy = r.position[1] - s.y;
+                            const dz = r.position[2] - s.z;
+                            return dx * dx + dy * dy + dz * dz < MIN_SAMPLE_SPACING * MIN_SAMPLE_SPACING;
+                        });
+                        if (!insideObstacle && !tooClose) {
+                            sampleList.push({ id: `s-${sampleList.length}`, x: r.position[0], y: r.position[1], z: r.position[2] });
+                        }
                     } catch (_) { }
                 }
                 setSamples(sampleList);
                 const arrowElStart = document.getElementById('sample-arrow') as any;
                 if (arrowElStart) arrowElStart.setAttribute('visible', 'true');
 
-                // Obstacles (visual only for now)
-                const obsList: { id: string; x: number; y: number; z: number; radius: number}[] = [];
-                for (let i = 0; i < OBSTACLE_DIRECTIONS.length; i++) {
-                    const [dx, dy, dz, radius] = OBSTACLE_DIRECTIONS[i % OBSTACLE_DIRECTIONS.length];
-                    
-                    try {
-                        const r = get_surface_point_in_direction(dx, dy, dz);
-                        obsList.push({
-                            id: `o-${i}`,
-                            x: r.position[0],
-                            y: r.position[1],
-                            z: r.position[2],
-                            radius,
-                        });
-                    } catch (_) {}
-                }          
-                setObstacles(obsList);
-
-                energyRef.current = 100;
-                setEnergy(100);
+                energyRef.current = MAX_ENERGY;
+                setEnergy(MAX_ENERGY);
+                wasInObstacleRef.current = false;
+                endTriggeredRef.current = false;
             } else {
                 setSamples([]);
                 setObstacles([]);
@@ -732,15 +754,21 @@ const App = () => {
 
     /** Trigger end screen when all samples collected or energy depleted. */
     useEffect(() => {
-        if (gameState !== 'WEB_GAME' || showEndScreen) return;
+        if (gameState !== 'WEB_GAME' || endTriggeredRef.current) return;
         if (samplesCollected >= modeCfg.spawnSamples) {
+            endTriggeredRef.current = true;
+            const bonus = modeCfg.energyBonusEnabled ? Math.round((energyRef.current / MAX_ENERGY) * 1000) : 0;
+            setEnergyBonus(bonus);
+            setScore(s => s + bonus);
             setEndReason('complete');
             setShowEndScreen(true);
         } else if (modeCfg.energyEnabled && energy <= 0) {
+            endTriggeredRef.current = true;
+            setEnergyBonus(0);
             setEndReason('energy');
             setShowEndScreen(true);
         }
-    }, [samplesCollected, energy, gameState, showEndScreen]);
+    }, [samplesCollected, energy, gameState]);
 
     /** Keyboard listeners and rover init: snap to surface before revealing scene. */
     useEffect(() => {
@@ -907,9 +935,9 @@ const App = () => {
                                     refs[next].current?.focus();
                                 }
                             }}>
-                                <button ref={diffBtnRefs[0]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game', 'easy'); }}>Easy</button>
-                                <button ref={diffBtnRefs[1]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game', 'normal'); }}>Normal</button>
-                                <button ref={diffBtnRefs[2]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game', 'hard'); }}>Hard</button>
+                                <button ref={diffBtnRefs[0]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game', 'easy'); }}>Story</button>
+                                <button ref={diffBtnRefs[1]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game', 'normal'); }}>Standard</button>
+                                <button ref={diffBtnRefs[2]} className="difficulty-btn" onClick={() => { setShowDifficulty(false); handleStart('web_game', 'hard'); }}>Challenge</button>
                             </div>
                         </div>
                     </div>
@@ -998,7 +1026,7 @@ const App = () => {
                         </div>
 
                         <div className="mode-ui">
-                            {modeCfg.energyEnabled && <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>}
+                            {modeCfg.energyEnabled && <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${(energy / MAX_ENERGY) * 100}%` }} /></div></div>}
                             <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
                         </div>
 
@@ -1017,8 +1045,6 @@ const App = () => {
 
             {gameState === 'WEB_GAME' && (
                 <>
-                    {/* Mode banner shows active mode and difficulty */}
-                    <div className="mode-banner">WEB GAME — {difficulty.toUpperCase()}</div>
                     {/* Web Game Scene - hidden until rover is snapped to surface */}
                     <div style={{
                         position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0,
@@ -1188,7 +1214,7 @@ const App = () => {
                             SCORE <span id="score">{score}</span>
                         </div>
                         <div className="mode-ui">
-                            {modeCfg.energyEnabled && <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${energy}%` }} /></div></div>}
+                            {modeCfg.energyEnabled && <div className="energy-display">ENERGY <div className="energy-bar"><div style={{ width: `${(energy / MAX_ENERGY) * 100}%` }} /></div></div>}
                             <div className="samples-display">SAMPLES <span style={{ color: '#7bffb2', fontWeight: 800 }}>{samplesCollected}</span></div>
                         </div>
                         {/* WAYPOINT POPUP */}
@@ -1241,6 +1267,12 @@ const App = () => {
                                             <span className="end-stat-label">Samples Collected</span>
                                             <span className="end-stat-value">{samplesCollected} / {modeCfg.spawnSamples}</span>
                                         </div>
+                                        {energyBonus > 0 && (
+                                            <div className="end-stat">
+                                                <span className="end-stat-label">Energy Bonus</span>
+                                                <span className="end-stat-value">+{energyBonus}</span>
+                                            </div>
+                                        )}
                                         <div className="end-stat">
                                             <span className="end-stat-label">Final Score</span>
                                             <span className="end-stat-value">{score}</span>
