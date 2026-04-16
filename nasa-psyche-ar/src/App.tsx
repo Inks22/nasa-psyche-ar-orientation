@@ -55,7 +55,6 @@ const WAYPOINT_DIRECTIONS: [number, number, number][] = [
     [0.707, 0.707, 0], [-0.707, 0.5, -0.5], [0, 0, -1], [0.5, -0.707, -0.5],
 ];
 
-<<<<<<< HEAD
 const INTRO_CONTENT: Record<string, { welcome: string; description: string }> = {
     easy: {
         welcome: 'Welcome to Story Mode',
@@ -70,7 +69,6 @@ const INTRO_CONTENT: Record<string, { welcome: string; description: string }> = 
         description: "Psyche is at its most unforgiving. Energy drains your battery, and craters larger than the rover are scattered across the surface — driving into one cuts your speed in half. Navigate carefully, collect samples quickly, and use the indicator arrow wisely. The mission ends when you collect all 20 samples or run out of energy.",
     },
 };
-=======
 const OBSTACLE_DIRECTIONS: [number, number, number, number][] = [
     [0.6849, 2.2127, -1.16, 1.15],
     [-0.6158, 2.7743, 0.4824, .8],
@@ -82,7 +80,6 @@ const OBSTACLE_DIRECTIONS: [number, number, number, number][] = [
     [-0.4975, -0.5, 2.7357, 0.24],
     [-1.21, -1.4, 1.6656, 0.35],
 ];
->>>>>>> feature/obstacles
 
 const App = () => {
     const [gameState, setGameState] = useState('MENU');
@@ -481,11 +478,8 @@ const App = () => {
                 energyRef.current = drained;
                 setEnergy(drained);
             }
-<<<<<<< HEAD
 
             /* Check sample collection within radius. */
-=======
->>>>>>> feature/obstacles
             const COLLECTION_RADIUS = 0.25;
             /* Check waypoint collection within radius (waypoints + samples). */
             const rx = result.position[0], ry = result.position[1], rz = result.position[2];
