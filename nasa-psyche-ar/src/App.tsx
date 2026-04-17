@@ -735,7 +735,7 @@ const App = () => {
                             const n = new THREE.Vector3(r.normal[0], r.normal[1], r.normal[2]).normalize();
 						    const qu = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
 						    const e = new THREE.Euler().setFromQuaternion(qu, 'YXZ');
-                            sampleList.push({ id: `s-${sampleList.l2ength}`, x: r.position[0], y: r.position[1], z: r.position[2], 
+                            sampleList.push({ id: `s-${sampleList.length}`, x: r.position[0], y: r.position[1], z: r.position[2], 
                                              model: modelList[sampleList.length % modelList.length],
                                              rx: e.x * 180 / Math.PI, 
 						                     ry: e.y * 180 / Math.PI, 
