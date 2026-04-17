@@ -88,7 +88,7 @@ const App = () => {
     const [difficulty, setDifficulty] = useState<'easy' | 'normal' | 'hard'>('normal');
     const modeCfg = MODE_CONFIG[difficulty as Difficulty];
     // Samples (collectibles) and Obstacles
-    const [samples, setSamples] = useState<{ id: string; x: number; y: number; z: number }[]>([]);
+    const [samples, setSamples] = useState<{ id: string; x: number; y: number; z: number; model: string; rx: any; ry: any; rz: any }[]>([]);
     const samplesRef = useRef<typeof samples>([]);
     samplesRef.current = samples;
     const [samplesCollected, setSamplesCollected] = useState(0);
@@ -709,9 +709,10 @@ const App = () => {
                 setObstacles(obsList);
 
                 // Samples — randomly placed on the asteroid surface, skipping obstacle zones
-                const sampleList: { id: string; x: number; y: number; z: number }[] = [];
+                const sampleList: { id: string; x: number; y: number; z: number; model: string; rx: any; ry: any; rz: any }[] = [];
                 const MIN_SAMPLE_SPACING = 1.5;
                 const MAX_ATTEMPTS = modeCfg.spawnSamples * 100;
+                const modelList = ["ore", "rock", "crystal"];
                 let attempts = 0;
                 while (sampleList.length < modeCfg.spawnSamples && attempts < MAX_ATTEMPTS) {
                     attempts++;
@@ -731,7 +732,15 @@ const App = () => {
                             return dx * dx + dy * dy + dz * dz < MIN_SAMPLE_SPACING * MIN_SAMPLE_SPACING;
                         });
                         if (!insideObstacle && !tooClose) {
-                            sampleList.push({ id: `s-${sampleList.length}`, x: r.position[0], y: r.position[1], z: r.position[2] });
+                            const n = new THREE.Vector3(r.normal[0], r.normal[1], r.normal[2]).normalize();
+						    const qu = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+						    const e = new THREE.Euler().setFromQuaternion(qu, 'YXZ');
+                            sampleList.push({ id: `s-${sampleList.l2ength}`, x: r.position[0], y: r.position[1], z: r.position[2], 
+                                             model: modelList[sampleList.length % modelList.length],
+                                             rx: e.x * 180 / Math.PI, 
+						                     ry: e.y * 180 / Math.PI, 
+						                     rz: e.z * 180 / Math.PI
+                                             });
                         }
                     } catch (_) { }
                 }
@@ -1121,8 +1130,15 @@ const App = () => {
 
                             {/* Samples (collectibles) */}
                             {samples.map(s => (
-                                <a-entity key={s.id} position={`${s.x} ${s.y} ${s.z}`}>
-                                    <a-sphere radius="0.05" color="#7bffb2" material="transparent: true; opacity: 0.95" />
+                                <a-entity 
+									key={s.id} 
+									position={`${s.x} ${s.y} ${s.z}`}
+									rotation={`${s.rx} ${s.ry} ${s.rz}`}
+									>
+                                    <a-gltf-model
+										src={`./models/${s.model}.glb`}
+										scale="0.25 0.25 0.25"
+									></a-gltf-model>
                                 </a-entity>
                             ))}
 
